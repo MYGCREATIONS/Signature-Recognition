@@ -1,0 +1,329 @@
+using System;
+using System.Collections.Generic;
+using System.Collections;
+using System.Drawing;
+using System.Drawing.Imaging;
+using MathNet.Numerics.LinearAlgebra;
+using System.Linq;
+
+/* 
+This code runs in visual studio or any ide that supports c# 
+To run this code please download Nuget Package Math.Net 
+This code takes in two pictures and computes the similarity function between the two images
+This code implements N Block Chain Method
+
+Extracting N number of feature from the pixel 
+*/
+
+
+namespace SignatureVerification
+{
+    class Program
+    {
+        // Number of Chains 4, 32 64.........
+        // Set the number of Chains
+        private static int numberOfChains = 64;
+
+        static void Main(string[] args)
+        {
+            var signature1 = new Bitmap(@"C:\Users\Desktop\ImageProcessing\images\image1.jpg");
+            var signature2 = new Bitmap(@"C:\Users\Desktop\ImageProcessing\images\image2.jpg");
+
+            //converting signature1  to grayscale
+            var signature1_grayScaleImage = convertingToGrayScale(signature1);
+            //Initializing variables for feature of signature1
+            double[,] signature1_Grad_X = new double[signature1_grayScaleImage.Width, signature1_grayScaleImage.Height];
+            double[,] signature1_Grad_Y = new double[signature1_grayScaleImage.Width, signature1_grayScaleImage.Height];
+            double[,] signature1_Grad_Abs = new double[signature1_grayScaleImage.Width, signature1_grayScaleImage.Height];
+      
+            var signature1_nChain = new List<double>[signature1_grayScaleImage.Width, signature1_grayScaleImage.Height];
+            // 9*9 blocks 81 tuples feature vector
+            var signature1_FeatureVector = new List<List<double>>();
+            //Applying the methods to signature 1
+            applyingSobelFilter(signature1_grayScaleImage, signature1_Grad_X, signature1_Grad_Y, signature1_Grad_Abs);
+            buildingN_Chain(signature1_grayScaleImage, signature1_Grad_X, signature1_Grad_Y, signature1_Grad_Abs, signature1_nChain);
+            featureVector(signature1_grayScaleImage, signature1_nChain, signature1_FeatureVector);
+
+
+            //Converting Signature2 to grayscale
+            var signature2_grayScaleImage = convertingToGrayScale(signature2);
+            //Initializing variables for feature of signature2
+            double[,] signature2_Grad_X = new double[signature2_grayScaleImage.Width, signature2_grayScaleImage.Height];
+            double[,] signature2_Grad_Y = new double[signature2_grayScaleImage.Width, signature2_grayScaleImage.Height];
+            double[,] signature2_Grad_Abs = new double[signature2_grayScaleImage.Width, signature2_grayScaleImage.Height];
+         
+            var signature2_nChain = new List<double>[signature2_grayScaleImage.Width, signature2_grayScaleImage.Height];
+            // 9*9 blocks 81 tuples feature vector
+            var signature2_FeatureVector = new List<List<double>>();
+
+            //Applying methods to signature2
+            applyingSobelFilter(signature2_grayScaleImage, signature2_Grad_X, signature2_Grad_Y, signature2_Grad_Abs);
+            buildingN_Chain(signature2_grayScaleImage, signature2_Grad_X, signature2_Grad_Y, signature2_Grad_Abs, signature2_nChain);
+            featureVector(signature2_grayScaleImage, signature2_nChain, signature2_FeatureVector);
+
+
+            //Calculating cosine similarity between the two signature
+            calculatingCosineSimilarity(signature1_FeatureVector, signature2_FeatureVector);
+            Console.ReadLine();
+        }
+
+        private static void calculatingCosineSimilarity(List<List<double>> signature1_FeatureVector, List<List<double>> signature2_FeatureVector)
+        {
+            double similarity;
+            double numertor = 0;
+
+            double den1 = 0, den2 = 0;
+
+            // 81 blocks and N elements in each list per signature
+            for (int i = 0; i < 81; i++)
+            {
+                for (int j = 0; j < numberOfChains; j++)
+                {
+                    //Cosine formula
+                    numertor += signature1_FeatureVector[i][j] * signature2_FeatureVector[i][j];
+                    den1 += signature1_FeatureVector[i][j] * signature1_FeatureVector[i][j];
+                    den2 += signature2_FeatureVector[i][j] * signature2_FeatureVector[i][j];
+                }
+            }
+   
+            similarity = numertor / Math.Sqrt(den1 * den2);
+            //Console.WriteLine("numertor:::::::{0}", numertor);
+            //Console.WriteLine("denominator:::::::::{0}", Math.Sqrt(den1 * den2));
+            Console.WriteLine("The similarity between to two signature is {0}%", (int) (similarity*100));
+
+        }
+
+        /// <summary>
+        /// Divides image into blocks of 9*9 and computes
+        /// the sum of all the tuples inside each block and returns 
+        /// a list of N tuples 
+        /// </summary>
+        /// <param name="image"></param>
+        /// <param name="signatureN_Chain"></param>
+        /// <param name="signatureFeatureVector"></param>
+
+        private static void featureVector(Bitmap image, List<double>[,] signatureN_Chain, List<List<double>> signatureFeatureVector)
+        {
+            int width = image.Width;
+            int heigth = image.Height;
+            //List that will initialize with all 32 zeros and then will hold sum for all pixel in each block 
+            List<double> temp_List = Enumerable.Repeat(0.0, numberOfChains).ToList();
+
+            //Breaking the image into 9 * 9 Blocks 
+            for (int i = 1; i < width - 1; i = i + width / 9)
+            {
+                for (int j = 1; j < heigth - 1; j = j + heigth / 9)
+                {
+                    //Reseting list with 32 element zero for each block initially
+                    resetList(temp_List);
+                    //Entering an individual block one by one
+                    //Making sure that index doesnot move out of picture 
+                    for (int _i = i; _i < i + width / 9 && _i < width - 1; _i++)
+                    {
+
+                        for (int _j = j; _j < j + heigth / 9 && _j < heigth - 1; _j++)
+                        {
+                            //Computes the sum element by element of each pixel within the block
+                            for (int x = 0; x < numberOfChains; x++)
+                            {
+                                temp_List[x] += signatureN_Chain[_i, _j].ElementAt(x);
+                            }
+
+                        }
+
+                    }
+                    //When the block ends add the summed list 
+                    signatureFeatureVector.Add(temp_List.ToList());
+                }
+            }
+
+        }
+        /// <summary>
+        /// Calculates N Chain Code values by checking the Gradient
+        /// in each quadrant and return a tuple (e0,e1,e2,e3,...........eN)
+        /// </summary>
+        /// <param name="image"></param>
+        /// <param name="Grad_X"></param>
+        /// <param name="Grad_Y"></param>
+        /// <param name="Grad_Abs"></param>
+        /// <param name="Grad_Angle"></param>
+        /// <param name="E"></param>
+        private static void buildingN_Chain(Bitmap image, double[,] Grad_X, double[,] Grad_Y, double[,] Grad_Abs, List<double>[,] E)
+        {
+            double theta;
+            int positionToTurnOn;
+
+            List<double> temp_List = Enumerable.Repeat(0.0, numberOfChains).ToList();
+
+            //travel throught the whole image pixel by pixel
+            for (int x = 1; x < image.Width - 1; x++)
+            {
+                for (int y = 1; y < image.Height - 1; y++)
+                {
+                    //Reseting list with 32 element zero for next iteration
+                    resetList(temp_List);
+                    //for the first quadrant           
+                    if (Grad_X[x, y] >= 0 && Grad_Y[x, y] >= 0)
+                    {
+                        //Reseting list with 32 element zero for next iteration
+                        resetList(temp_List);
+                        theta = Math.Atan2(Grad_Y[x, y], Grad_X[x, y]);
+                        positionToTurnOn = (int)(theta * numberOfChains / (2 * Math.PI));
+                        // apply the grad value to the specific bit 
+                        temp_List[positionToTurnOn] = Grad_Abs[x, y];
+                        // put the list in the two dimensional array for each pixel
+                        E[x, y] = temp_List.ToList();
+                    }
+
+
+                    //for the second quadrant
+                    else if (Grad_X[x, y] <= 0 && Grad_Y[x, y] >= 0)
+                    {
+                        //Reseting list with 32 element zero for next iteration
+                        resetList(temp_List);
+                        theta = Math.Atan2(Grad_Y[x, y], -Grad_X[x, y]);
+                        positionToTurnOn = (int)(theta * numberOfChains / (2 * Math.PI));
+                        // apply the grad value to the specific location 
+                        temp_List[positionToTurnOn] = Grad_Abs[x, y];
+                        // put the list in the two dimensional array for each pixel
+                        E[x, y] = temp_List.ToList();
+                    }
+
+
+                    //for the third quadrant
+                    else if (Grad_X[x, y] <= 0 && Grad_Y[x, y] <= 0)
+                    {
+                        //Reseting list with 32 element zero for next iteration
+                        resetList(temp_List);
+                        theta = Math.Atan2(-Grad_Y[x, y], -Grad_X[x, y]);
+                        positionToTurnOn = (int)(theta * numberOfChains / (2 * Math.PI));
+                        // apply the grad value to the 
+                        temp_List[positionToTurnOn] = Grad_Abs[x, y];
+                        E[x, y] = temp_List.ToList();
+                    }
+
+                    //for the fourth quadrant
+                    else if (Grad_X[x, y] >= 0 && Grad_Y[x, y] <= 0)
+                    {
+                        //Reseting list with 32 element zero for next iteration
+                        resetList(temp_List);
+                        theta = Math.Atan2(-Grad_Y[x, y], Grad_X[x, y]);
+                        positionToTurnOn = (int)(theta * numberOfChains / (2 * Math.PI));
+                        // apply the grad value to the 
+                        temp_List[positionToTurnOn] = Grad_Abs[x, y];
+                        E[x, y] = temp_List.ToList();
+                    }
+                    //to check that no condition is by passed
+                    else
+                    {
+                        throw new Exception("some condition is missing");
+                    }
+                }
+            }
+
+
+        }
+
+        /// <summary>
+        /// Takes in the list and resets all elements to 0
+        /// </summary>
+        /// <param name="temp_List"></param>
+        private static void resetList(List<double> temp_List)
+        {
+            for (int z = 0; z < temp_List.Count; z++)
+            {
+                temp_List[z] = 0.0;
+            }
+        }
+
+
+
+
+
+        /// <summary>
+        /// Takes in original image and converts the image into
+        /// grayscale by applying averaging by rgb values
+        /// </summary>
+        /// <param name="image"></param>
+        /// <param name="grayScaleImage"></param>
+        private static Bitmap convertingToGrayScale(Bitmap image)
+        {
+            var grayScaleImage = new Bitmap(image.Width, image.Height);
+
+            for (int x = 0; x < image.Width; x++)
+            {
+                for (int y = 0; y < image.Height; y++)
+                {
+                    //Getting the pixel color
+                    Color oldPixelColor = image.GetPixel(x, y);
+                    //Calculating average value for grayscale conversion
+                    int grayScaleAverage = (int)((oldPixelColor.R * 0.3) + (oldPixelColor.G * 0.59) + (oldPixelColor.B * 0.11));
+                    grayScaleImage.SetPixel(x, y, Color.FromArgb(grayScaleAverage, grayScaleAverage, grayScaleAverage));
+                }
+
+            }
+
+
+            return grayScaleImage;
+
+
+        }
+
+
+
+        /// <summary>
+        /// This method takes an image and 
+        /// applies sobel fitler and calculates
+        /// gradient 
+        /// </summary>
+        /// <param name="image"></param>
+        /// <param name="Grad_X"></param>
+        /// <param name="Grad_Y"></param>
+        /// <param name="Grad_Abs"></param>
+
+        private static void applyingSobelFilter(Bitmap image, double[,] Grad_X, double[,] Grad_Y, double[,] Grad_Abs)
+        {
+            //Matrix Defination
+            var m = Matrix<double>.Build;
+            var gradientImage = new Bitmap(image.Width, image.Height);
+            double[,] Sobel_X = {{-1, 0, 1},
+                       {-2, 0, 2},
+                       {-1, 0, 1}};
+
+            double[,] Sobel_Y = {{-1, -2, -1},
+                        {0,  0,  0},
+                        {1,  2,  1}};
+            //Forming Matrix for Sobelx 3*3
+            var sobel_x = m.DenseOfArray(Sobel_X);
+            var sobel_y = m.DenseOfArray(Sobel_Y);
+
+            //Moving throught the complete image
+            for (int x = 1; x < image.Width - 1; x++)
+            {
+                for (int y = 1; y < image.Height - 1; y++)
+                {
+
+                    //Intensity of each pixel calculated by extracting R component out of each pixel
+                    double[,] intensityMatrix = { {image.GetPixel(x-1,y-1).R,image.GetPixel(x-1,y).R,image.GetPixel(x-1,y+1).R },
+                                                {image.GetPixel(x,y-1).R,image.GetPixel(x,y).R,image.GetPixel(x,y+1).R },
+                                                {image.GetPixel(x+1,y-1).R,image.GetPixel(x+1,y).R,image.GetPixel(x+1,y+1).R } };
+                    //3*3 matrix consisting of intensities of all adjacent pixels around the pixel(x,y)
+                    var adjacentPixelIntMatrix = m.DenseOfArray(intensityMatrix);
+
+                    //Multiplying element to element with sobel_x and computing the sum to get Grad_x
+                    Grad_X[x, y] = (adjacentPixelIntMatrix.PointwiseMultiply(sobel_x)).ColumnSums().Sum();
+                    //Multiplying element to element with sobel_y to get Grad_y and computing the sum to get Grad_y
+                    Grad_Y[x, y] = (adjacentPixelIntMatrix.PointwiseMultiply(sobel_y)).ColumnSums().Sum();
+                    //Gradient absolute 
+                    Grad_Abs[x, y] = Math.Sqrt((Grad_X[x, y] * Grad_X[x, y]) + (Grad_Y[x, y] * Grad_Y[x, y]));
+                }
+            }
+            //Plotting output of gradient image 
+            gradientImage.Save(@"C:\Users\Desktop\ImageProcessing\images\latestimage.jpeg", ImageFormat.Jpeg);
+        }
+
+    }
+}
+
+
+
